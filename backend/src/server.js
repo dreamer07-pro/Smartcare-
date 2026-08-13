@@ -79,9 +79,7 @@ app.get('/api/patient/:patientId/appointments', async (req, res) => {
 
   const { data, error } = await supabase
     .from('appointments')
-    .select(
-      'id,date,time_slot,token_number,status,doctor_id,doctors:specialization'
-    )
+    .select('id,date,time_slot,token_number,status,doctor_id,doctors:doctor_id(specialization)')
     .eq('patient_id', req.params.patientId)
     .order('created_at', { ascending: false });
 
