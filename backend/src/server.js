@@ -32,6 +32,7 @@ function requireConfig(res) {
   return true;
 }
 
+// Health
 app.get('/api/health', (_, res) => {
   res.json({
     ok: true,
@@ -39,6 +40,7 @@ app.get('/api/health', (_, res) => {
   });
 });
 
+// Get doctors
 app.get('/api/doctors', async (_, res) => {
   if (!requireConfig(res)) return;
 
@@ -47,12 +49,15 @@ app.get('/api/doctors', async (_, res) => {
     .select('id,specialization,profiles:user_id(name,email)');
 
   if (error) {
-    return res.status(400).json({ error: error.message });
+    return res.status(400).json({
+      error: error.message
+    });
   }
 
   res.json(data || []);
 });
 
+// Get doctor queue
 app.get('/api/queue/:doctorId/:date', async (req, res) => {
   if (!requireConfig(res)) return;
 
@@ -68,28 +73,38 @@ app.get('/api/queue/:doctorId/:date', async (req, res) => {
     .order('token_number');
 
   if (error) {
-    return res.status(400).json({ error: error.message });
+    return res.status(400).json({
+      error: error.message
+    });
   }
 
   res.json(data || []);
 });
 
+// Patient appointments
 app.get('/api/patient/:patientId/appointments', async (req, res) => {
   if (!requireConfig(res)) return;
 
   const { data, error } = await supabase
     .from('appointments')
-    .select('id,date,time_slot,token_number,status,doctor_id,doctors:doctor_id(specialization)')
+    .select(
+      'id,date,time_slot,token_number,status,doctor_id,doctors:doctor_id(specialization)'
+    )
     .eq('patient_id', req.params.patientId)
-    .order('created_at', { ascending: false });
+    .order('created_at', {
+      ascending: false
+    });
 
   if (error) {
-    return res.status(400).json({ error: error.message });
+    return res.status(400).json({
+      error: error.message
+    });
   }
 
   res.json(data || []);
 });
 
+// Book appointment
 app.post('/api/appointments', async (req, res) => {
   if (!requireConfig(res)) return;
 
@@ -100,6 +115,7 @@ app.post('/api/appointments', async (req, res) => {
     time_slot
   } = req.body;
 
+  // Check required fields
   if (!patient_id || !doctor_id || !date || !time_slot) {
     return res.status(400).json({
       error:
@@ -107,6 +123,7 @@ app.post('/api/appointments', async (req, res) => {
     });
   }
 
+  // Check duplicate time slot
   const duplicate = await supabase
     .from('appointments')
     .select('id')
@@ -128,23 +145,31 @@ app.post('/api/appointments', async (req, res) => {
     });
   }
 
-  const existing = await supabase
-    .from('appointments')
-    .select('token_number')
-    .eq('doctor_id', doctor_id)
-    .eq('date', date)
-    .order('token_number', { ascending: false })
-    .limit(1);
+  // Generate random token
+  let token;
+  let tokenExists = true;
 
-  if (existing.error) {
-    return res.status(400).json({
-      error: existing.error.message
-    });
+  while (tokenExists) {
+    token = Math.floor(100 + Math.random() * 900);
+
+    const checkToken = await supabase
+      .from('appointments')
+      .select('id')
+      .eq('doctor_id', doctor_id)
+      .eq('date', date)
+      .eq('token_number', token)
+      .limit(1);
+
+    if (checkToken.error) {
+      return res.status(400).json({
+        error: checkToken.error.message
+      });
+    }
+
+    tokenExists = checkToken.data?.length > 0;
   }
 
-  const token =
-    (existing.data?.[0]?.token_number || 100) + 1;
-
+  // Insert appointment
   const { data, error } = await supabase
     .from('appointments')
     .insert({
@@ -166,6 +191,7 @@ app.post('/api/appointments', async (req, res) => {
   res.status(201).json(data);
 });
 
+// Update appointment status
 app.patch('/api/appointments/:id/status', async (req, res) => {
   if (!requireConfig(res)) return;
 
@@ -181,7 +207,9 @@ app.patch('/api/appointments/:id/status', async (req, res) => {
 
   const { data, error } = await supabase
     .from('appointments')
-    .update({ status })
+    .update({
+      status
+    })
     .eq('id', req.params.id)
     .select()
     .single();
@@ -195,6 +223,7 @@ app.patch('/api/appointments/:id/status', async (req, res) => {
   res.json(data);
 });
 
+// Add prescription
 app.post('/api/prescriptions', async (req, res) => {
   if (!requireConfig(res)) return;
 
@@ -226,6 +255,7 @@ app.post('/api/prescriptions', async (req, res) => {
   res.status(201).json(data);
 });
 
+// Get medicine reminders
 app.get('/api/reminders/:patientId', async (req, res) => {
   if (!requireConfig(res)) return;
 
@@ -244,6 +274,7 @@ app.get('/api/reminders/:patientId', async (req, res) => {
   res.json(data || []);
 });
 
+// Add medicine reminder
 app.post('/api/reminders', async (req, res) => {
   if (!requireConfig(res)) return;
 
@@ -276,6 +307,7 @@ app.post('/api/reminders', async (req, res) => {
   res.status(201).json(data);
 });
 
+// Update medicine reminder
 app.patch('/api/reminders/:id', async (req, res) => {
   if (!requireConfig(res)) return;
 
@@ -283,7 +315,9 @@ app.patch('/api/reminders/:id', async (req, res) => {
 
   const { data, error } = await supabase
     .from('medicine_reminders')
-    .update({ active })
+    .update({
+      active
+    })
     .eq('id', req.params.id)
     .select()
     .single();
@@ -297,4 +331,7 @@ app.patch('/api/reminders/:id', async (req, res) => {
   res.json(data);
 });
 
-export default app;
+// Start server
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+});
